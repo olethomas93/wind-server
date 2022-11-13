@@ -5,10 +5,11 @@ var request = require('request');
 var fs = require('fs');
 var Q = require('q');
 var cors = require('cors');
+const grib2json = require('weacast-grib2json')
 
 var app = express();
 var port = process.env.PORT || 7000;
-var baseDir ='http://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
+var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
 
 // cors config
 var whitelist = [
@@ -33,6 +34,13 @@ app.get('/', cors(corsOptions), function(req, res){
     res.send('hello wind-js-server.. go to /latest for wind data..');
 });
 
+
+
+app.get('/test', cors(corsOptions), function(req, res){
+	var targetMoment =moment.utc()
+     run(targetMoment)
+});
+
 app.get('/alive', cors(corsOptions), function(req, res){
 	res.send('wind-js-server is alive');
 });
@@ -46,7 +54,7 @@ app.get('/latest', cors(corsOptions), function(req, res){
 	 */
 	function sendLatest(targetMoment){
 
-		var stamp = moment(targetMoment).format('YYYYMMDD') + roundHours(moment(targetMoment).hour(), 6);
+		var stamp = moment(targetMoment).format('YYYYMMDD')
 		var fileName = __dirname +"/json-data/"+ stamp +".json";
 
 		res.setHeader('Content-Type', 'application/json');
@@ -87,7 +95,7 @@ app.get('/nearest', cors(corsOptions), function(req, res, next){
 			}
 		}
 
-		var stamp = moment(targetMoment).format('YYYYMMDD') + roundHours(moment(targetMoment).hour(), 6);
+		var stamp = moment(targetMoment).format('YYYYMMDD')
 		var fileName = __dirname +"/json-data/"+ stamp +".json";
 
 		res.setHeader('Content-Type', 'application/json');
@@ -150,30 +158,31 @@ function getGribData(targetMoment){
             return;
         }
 
-		var stamp = moment(targetMoment).format('YYYYMMDD') + roundHours(moment(targetMoment).hour(), 6);
+		
+
+		var stamp = moment(targetMoment).format('YYYYMMDD')
+
 		request.get({
 			url: baseDir,
 			qs: {
 				file: 'gfs.t'+ roundHours(moment(targetMoment).hour(), 6) +'z.pgrb2.1p00.f000',
 				lev_10_m_above_ground: 'on',
 				lev_surface: 'on',
-				var_TMP: 'on',
 				var_UGRD: 'on',
 				var_VGRD: 'on',
 				leftlon: 0,
 				rightlon: 360,
 				toplat: 90,
 				bottomlat: -90,
-				dir: '/gfs.'+stamp
+				dir: '/gfs.'+stamp+'/'+roundHours(moment(targetMoment).hour(), 6)+'/atmos'
 			}
 
 		}).on('error', function(err){
-			// console.log(err);
+			console.log(err);
 			runQuery(moment(targetMoment).subtract(6, 'hours'));
 
 		}).on('response', function(response) {
-
-			console.log('response '+response.statusCode + ' | '+stamp);
+			
 
 			if(response.statusCode != 200){
 				runQuery(moment(targetMoment).subtract(6, 'hours'));
@@ -204,6 +213,7 @@ function getGribData(targetMoment){
 			}
 		});
 
+	
 	}
 
 	runQuery(targetMoment);
@@ -216,8 +226,16 @@ function convertGribToJson(stamp, targetMoment){
 	checkPath('json-data', true);
 
 	var exec = require('child_process').exec, child;
+	grib2json('grib-data/'+stamp+'.f000', {
+		data: true,
+		output: 'json-data/output.json'
+	  })
+	  .then(function (json) {
+		
+		// Do whatever with the json data, same format as output of the CLI
+	  })
 
-	child = exec('converter/bin/grib2json --data --output json-data/'+stamp+'.json --names --compact grib-data/'+stamp+'.f000',
+	child = exec(__dirname+'/converter/bin/grib2json --data --output json-data/'+stamp+'.json --names --compact grib-data/'+stamp+'.f000',
 		{maxBuffer: 500*1024},
 		function (error, stdout, stderr){
 
@@ -233,7 +251,7 @@ function convertGribToJson(stamp, targetMoment){
 
 				// if we don't have older stamp, try and harvest one
 				var prevMoment = moment(targetMoment).subtract(6, 'hours');
-				var prevStamp = prevMoment.format('YYYYMMDD') + roundHours(prevMoment.hour(), 6);
+				var prevStamp = prevMoment.format('YYYYMMDD')
 
 				if(!checkPath('json-data/'+ prevStamp +'.json', false)){
 
@@ -246,6 +264,21 @@ function convertGribToJson(stamp, targetMoment){
 				}
 			}
 		});
+}
+function convertGribToJson2(stamp, targetMoment){
+
+	// mk sure we've got somewhere to put output
+	checkPath('json-data', true);
+
+	var exec = require('child_process').exec, child;
+	grib2json('meps.grib', {
+		data: true,
+		output: 'json-data/output.json',
+		bufferSize: 500*1024
+	  })
+	  .then(function (json) {
+		// Do whatever with the json data, same format as output of the CLI
+	  })
 }
 
 /**
