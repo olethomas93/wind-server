@@ -8,7 +8,7 @@ var cors = require('cors');
 const grib2json = require('weacast-grib2json')
 
 var app = express();
-var port = process.env.PORT || 5000;
+var port = process.env.PORT || 80;
 var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
 
 // cors config
