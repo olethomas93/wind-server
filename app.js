@@ -18,7 +18,8 @@ var whitelist = [
 	'http://localhost:63342',
 	'http://localhost:3000',
 	'http://localhost:4000',
-	'https://friliv.netlify.app'
+	'https://friliv.netlify.app',
+	'https://friliv.northei.no/'
 ];
 
 var corsOptions = {
