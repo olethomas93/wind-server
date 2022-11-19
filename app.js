@@ -9,22 +9,14 @@ const grib2json = require('weacast-grib2json')
 
 var app = express();
 var port = process.env.PORT || 5000;
+var host = process.env.HOST || 'localhost';
 var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
 
-// cors config
-var whitelist = [
-	'http://localhost:63342',
-	'http://localhost:3000',
-	'http://localhost:4000',
-	'http://danwild.github.io'
-];
 
-var corsOptions = {
-	origin: function(origin, callback){
-		var originIsWhitelisted = whitelist.indexOf(origin) !== -1;
-		callback(null, originIsWhitelisted);
-	}
-};
+const cors = require('cors');
+app.use(cors({
+    origin: 'https://www.friliv.netlify.app'
+}));
 
 app.listen(port, function(err){
 	console.log("running server on port "+ port);
