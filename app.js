@@ -13,10 +13,20 @@ var host = process.env.HOST || 'localhost';
 var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
 
 
-const cors = require('cors');
-app.use(cors({
-    origin: 'https://www.friliv.netlify.app'
-}));
+// cors config
+var whitelist = [
+	'http://localhost:63342',
+	'http://localhost:3000',
+	'http://localhost:4000',
+	'https://www.windy.northei.no'
+];
+
+var corsOptions = {
+	origin: function(origin, callback){
+		var originIsWhitelisted = whitelist.indexOf(origin) !== -1;
+		callback(null, originIsWhitelisted);
+	}
+};
 
 app.listen(port, function(err){
 	console.log("running server on port "+ port);
