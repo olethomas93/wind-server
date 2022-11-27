@@ -73,11 +73,12 @@ res.send(result)
 app.get('/aurora/forecast',cors(corsOptions),function(req,res){
 
 
-request.get({url:`https://www.yr.no/api/v0/locations/1-${req.query.placenumber}/auroraforecast?language=nb`,json:true},function(err,response,data){
+request.get({url:`https://www.yr.no/api/v0/locations/10-${req.query.placenumber}/auroraforecast?language=nb`,json:true},function(err,response,data){
 
 if(err){
 res.send('error')
 }else{
+
 
 res.send(data)
 
