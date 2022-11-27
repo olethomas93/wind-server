@@ -40,22 +40,23 @@ app.get('/', cors(corsOptions), function(req, res){
 
 app.get('/aurora',cors(corsOptions),function(req ,res){
 
-request.get({url:'https://services.swpc.noaa.gov/json/ovation_aurora_latest.json' , json:true}).on('response',function(response){
+request.get({url:'https://services.swpc.noaa.gov/json/ovation_aurora_latest.json', json: true},function(err, response, data){
 
-	if(response.statusCode != 200){
-		res.send('something happended')
-	}else{
-res.send(response)
+var coords= data.coordinates 
+var result=[]
+for(var i in coords){
 
-
-	}
+	result.push([Number(coords[i][1]) || 0 ,Number(coords[i][0]) || 0, Number(coords[i][2]) || 0])
 
 
-
-
-
+}
+res.send(result)
 
 })
+
+
+
+ 
 
 
 })
