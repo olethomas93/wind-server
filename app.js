@@ -46,7 +46,12 @@ var coords= data.coordinates
 var result=[]
 for(var i in coords){
 
-	result.push([Number(coords[i][1]) || 0 ,Number(coords[i][0]) || 0, Number(coords[i][2])/100 || 0])
+	if(coords[i][2]>0){
+
+		result.push([Number(coords[i][1]) || 0 ,Number(coords[i][0]) || 0, Number(coords[i][2])/100 || 0])
+	}
+
+	
 
 
 }
