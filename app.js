@@ -1,13 +1,17 @@
 var express = require("express");
+var bodyParser = require("body-parser");
 var moment = require("moment");
 var http = require('http');
 var request = require('request');
 var fs = require('fs');
 var Q = require('q');
 var cors = require('cors');
-const grib2json = require('weacast-grib2json')
+const grib2json = require('weacast-grib2json');
+const { json } = require("express");
 
 var app = express();
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 var port = process.env.PORT || 5000;
 var host = process.env.HOST || 'localhost';
 var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
@@ -38,7 +42,7 @@ app.get('/', cors(corsOptions), function(req, res){
 });
 
 
-app.get('/aurora',cors(corsOptions),function(req ,res){
+app.get('/aurora/model',cors(corsOptions),function(req ,res){
 
 request.get({url:'https://services.swpc.noaa.gov/json/ovation_aurora_latest.json', json: true},function(err, response, data){
 
@@ -62,6 +66,24 @@ res.send(result)
 
 
  
+
+
+})
+
+app.get('/aurora/forecast',cors(corsOptions),function(req,res){
+
+request.get({url:`https://www.yr.no/api/v0/locations/1-${req.body.placenumber}/auroraforecast?language=nb`,json:true},function(err,response,data){
+
+if(err){
+res.send('error')
+}else{
+
+res.send(data)
+
+}
+
+})
+
 
 
 })
