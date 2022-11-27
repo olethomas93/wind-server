@@ -38,6 +38,28 @@ app.get('/', cors(corsOptions), function(req, res){
 });
 
 
+app.get('/aurora',cors(corsOptions),function(req ,res){
+
+request.get('https://services.swpc.noaa.gov/json/ovation_aurora_latest.json').on('response',function(response){
+
+	if(response.statusCode != 200){
+		res.send('something happended')
+	}else{
+
+res.send(response)
+
+
+	}
+
+
+
+
+
+
+})
+
+
+})
 
 app.get('/test', cors(corsOptions), function(req, res){
 	var targetMoment =moment.utc()
