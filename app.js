@@ -93,7 +93,7 @@ res.send(data)
 app.get('/place',cors(corsOptions),function(req,res){
 
 
-	request.get({url:`https://www.yr.no/api/v0/locations/search?language=nb&lat=${req.query.lat}&lon=${req.query.lng}&accuracy=1000`,json:true},function(err,response,data){
+	request.get({url:`https://www.yr.no/api/v0/locations/search?language=nb&lat=${req.query.lat}&lon=${req.query.lng}&accuracy=500`,json:true},function(err,response,data){
 	
 	if(err){
 	res.send('error')
