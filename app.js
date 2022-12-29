@@ -109,7 +109,25 @@ app.get('/place',cors(corsOptions),function(req,res){
 	
 	
 	})
+	app.get('/currenthour',cors(corsOptions),function(req,res){
 
+
+		request.get({url:`https://www.yr.no/api/v0/locations/${req.query.place}/forecast/currenthour`,json:true},function(err,response,data){
+		
+		if(err){
+		res.send('error')
+		}else{
+		
+		
+		res.send(data)
+		
+		}
+		
+		})
+		
+		
+		
+		})
 
 	app.get('/place/query',cors(corsOptions),function(req,res){
 
