@@ -12,8 +12,8 @@ const { json } = require("express");
 var app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
-var port = process.env.PORT || 5000;
-var host = process.env.HOST || 'localhost';
+var port = process.env.PORT || 8080;
+var host = process.env.HOST || '0.0.0.0';
 var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
 
 
@@ -38,7 +38,7 @@ app.listen(port, function(err){
 });
 
 app.get('/', cors(corsOptions), function(req, res){
-    res.send('hello wind-js-server.. go to /latest for wind data..');
+    res.send('Største byen i finnmark er Alta');
 });
 
 
@@ -118,8 +118,9 @@ app.get('/place',cors(corsOptions),function(req,res){
 		res.send('error')
 		}else{
 		
-		
-		res.send(data)
+		let newdata = JSON.stringify(data)
+		res.setHeader("Content-Type","application/json")
+		res.send(newdata)
 		
 		}
 		
@@ -132,7 +133,7 @@ app.get('/place',cors(corsOptions),function(req,res){
 	app.get('/place/query',cors(corsOptions),function(req,res){
 
 
-		request.get({url:`https://www.yr.no/api/v0/locations/suggest?language=nb&q=${req.query.q}`,json:true},function(err,response,data){
+		request.get({url:`https://www.yr.no/api/v0/locations/suggest?language=nb&q=${req.query.q}`,json:false},function(err,response,data){
 		
 		if(err){
 		res.send('error')
