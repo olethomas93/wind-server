@@ -159,6 +159,13 @@ app.get('/alive', cors(corsOptions), function(req, res){
 	res.send('wind-js-server is alive');
 });
 
+app.get('/vasskraft',function(req,res){
+
+
+	res.send('HEI FRA VASSKRAFT')
+
+})
+
 app.get('/latest', cors(corsOptions), function(req, res){
 
 	/**
