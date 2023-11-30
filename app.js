@@ -8,10 +8,18 @@ var Q = require('q');
 var cors = require('cors');
 const grib2json = require('weacast-grib2json');
 const { json } = require("express");
+const mqtt = require('mqtt');
+
 
 var app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+
+const client = mqtt.connect('mqtt://localhost', {
+  autoUseTopicAlias: true,
+  autoAssignTopicAlias: true
+});
+
 var port = process.env.PORT || 8080;
 var host = process.env.HOST || '0.0.0.0';
 var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
@@ -160,6 +168,13 @@ app.get('/alive', cors(corsOptions), function(req, res){
 });
 
 app.get('/vasskraft', cors(corsOptions), function(req, res){
+	res.send('VASSKRAFT BABY');
+});
+app.get('/vasskraft/firebaseIot', cors(corsOptions), function(req, res){
+
+
+
+
 	res.send('VASSKRAFT BABY');
 });
 
