@@ -8,17 +8,22 @@ var Q = require('q');
 var cors = require('cors');
 const grib2json = require('weacast-grib2json');
 const { json } = require("express");
-const mqtt = require('mqtt');
+const { Pool } = require('pg');
+//const mqtt = require('mqtt');
+
+const pool = new Pool({
+	user: 'admin',
+	host: 'db',
+	database: 'iot',
+	password: '3d6768c7',
+	port: 5432,
+  });
 
 
 var app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-const client = mqtt.connect('mqtt://localhost', {
-  autoUseTopicAlias: true,
-  autoAssignTopicAlias: true
-});
 
 var port = process.env.PORT || 8080;
 var host = process.env.HOST || '0.0.0.0';
@@ -170,13 +175,60 @@ app.get('/alive', cors(corsOptions), function(req, res){
 app.get('/vasskraft', cors(corsOptions), function(req, res){
 	res.send('VASSKRAFT BABY');
 });
-app.get('/vasskraft/firebaseIot', cors(corsOptions), function(req, res){
+app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async function(req, res){
 
+	try {
+		var { data, resource, created } = req.body;
+		
+		console.log(req.body)
+		
+		let temp = resource.split("/")
+		let customer = temp[temp.length -2]
+		if(customer == "data"){
+			customer = "lars_kraft"
+		}
 
+		const insertResult = await pool.query(
+		  `INSERT INTO ${customer} (level, timestamp, voltage, sensor_type ,raw, timestamp_source,customer) VALUES ($1, $2, $3, $4, $5 ,$6, $7) RETURNING *`,
+		  [data.sensor, created, data.voltage, "level" , data.raw, data.time, customer]
+		);
+	
+		const insertedData = insertResult.rows[0];
+		res.json({ message: 'Sensor data inserted into the sensors_data table', insertedData });
+	  } catch (error) {
+		console.error('Error inserting sensor data into PostgreSQL:', error);
+		res.status(500).send('Internal Server Error');
+	  }
 
-
-	res.send('VASSKRAFT BABY');
 });
+
+app.post('/vasskraft/create', cors(corsOptions), express.json(), async function(req, res){
+
+	try {
+		var { data, resource, created } = req.body;
+		
+		console.log(req.body)
+		
+		let temp = resource.split("/")
+		let customer = temp[temp.length -2]
+		if(customer == "data"){
+			customer = "lars_kraft"
+		}
+
+		const insertResult = await pool.query(
+		  `INSERT INTO ${customer} (level, timestamp, voltage, sensor_type ,raw, timestamp_source,customer) VALUES ($1, $2, $3, $4, $5 ,$6, $7) RETURNING *`,
+		  [data.sensor, created, data.voltage, "level" , data.raw, data.time, customer]
+		);
+	
+		const insertedData = insertResult.rows[0];
+		res.json({ message: 'Sensor data inserted into the sensors_data table', insertedData });
+	  } catch (error) {
+		console.error('Error inserting sensor data into PostgreSQL:', error);
+		res.status(500).send('Internal Server Error');
+	  }
+
+});
+
 
 app.get('/latest', cors(corsOptions), function(req, res){
 
