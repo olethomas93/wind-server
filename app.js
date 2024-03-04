@@ -8,7 +8,17 @@ var Q = require('q');
 var cors = require('cors');
 const grib2json = require('weacast-grib2json');
 const { json } = require("express");
-const { Pool } = require('pg');
+const { InfluxDB, Point } = require('@influxdata/influxdb-client');
+const { Pool } = require('pg');s
+// InfluxDB connection configuration
+const influxDBConfig = {
+	url: 'http://localhost:8086',
+	token: 'pnjj0nC1HleJYcpo2rwQaNJRvghQAoQ0T0IRT-UPIdstMVMVzQyNujaIhIACne3pUcZHGrmyZUu8Yzo6uP_XZQ==',
+	org: 'Northei',
+	bucket: 'iot',
+  };
+  
+const influxDBClient = new InfluxDB(influxDBConfig);
 //const mqtt = require('mqtt');
 
 const pool = new Pool({
@@ -180,7 +190,7 @@ app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async func
 	try {
 		var { data, resource, created } = req.body;
 		
-		console.log(req.body)
+	
 		
 		let temp = resource.split("/")
 		let customer = temp[temp.length -2]
@@ -194,6 +204,16 @@ app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async func
 		);
 	
 		const insertedData = insertResult.rows[0];
+
+		await influxDBClient.writePoints([
+			{
+			  measurement: 'level', // Change this to your measurement name
+			  fields: { voltage:data.voltage, level:data.sensor, raw:data.raw,timestamp_source:data.time,customer,created,sensor_type:level },
+			  tags: { sensor },
+			  timestamp: new Date(created), // Assuming 'created' is a valid timestamp
+			},
+		  ]);
+	  
 		res.json({ message: 'Sensor data inserted into the sensors_data table', insertedData });
 	  } catch (error) {
 		console.error('Error inserting sensor data into PostgreSQL:', error);
@@ -201,6 +221,55 @@ app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async func
 	  }
 
 });
+
+app.get('/getData', async (req, res) => {
+	try {
+	  const startTime = req.query.startTime; // Start time of the range
+	  const endTime = req.query.endTime;
+	  const customer = req.query.customer     // End time of the range
+  
+	  // Query to retrieve data within the specified time range
+	  const query = `
+		SELECT *
+		FROM $3
+		WHERE timestamp >= $1 AND timestamp <= $2;
+	  `;
+  
+	  // Executing the query with parameters
+	  const { rows } = await pool.query(query, [startTime, endTime,customer]);
+  
+	  // Sending the retrieved data as a response
+	  res.json(rows);
+	} catch (error) {
+	  console.error('Error fetching data:', error);
+	  res.status(500).json({ error: 'Error fetching data' });
+	}
+  });
+  app.get('/getDataFromInfluxDB', async (req, res) => {
+	try {
+	  const measurement = req.query.measurement;
+	  const customer = req.query.customer; // Measurement name
+	  const startTime = req.query.startTime; // Start time of the range
+	  const endTime = req.query.endTime;     // End time of the range
+  
+	  // Flux query to retrieve data within the specified time range from the specified measurement
+	  const query = `
+		from(bucket: "${influxDBConfig.bucket}")
+		  |> range(start: ${startTime}, stop: ${endTime})
+		  |> filter(fn: (r) => r["_measurement"] == "${measurement}")
+		  |> filter(fn: (r) => r["customer"] == "${customer}")
+	  `;
+  
+	  // Executing the Flux query
+	  const fluxTable = await influxDBClient.getQueryApi(influxDBConfig.org).collectRows({ query });
+  
+	  // Sending the retrieved data as a response
+	  res.json(fluxTable);
+	} catch (error) {
+	  console.error('Error fetching data from InfluxDB:', error);
+	  res.status(500).json({ error: 'Error fetching data from InfluxDB' });
+	}
+  });
 
 app.post('/vasskraft/create', cors(corsOptions), express.json(), async function(req, res){
 
