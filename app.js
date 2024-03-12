@@ -209,7 +209,7 @@ app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async func
 			{
 			  measurement: 'level', // Change this to your measurement name
 			  fields: { voltage:data.voltage, level:data.sensor, raw:data.raw,timestamp_source:data.time,customer,created,sensor_type:level },
-			  tags: { sensor },
+			  tags: { level },
 			  timestamp: new Date(created), // Assuming 'created' is a valid timestamp
 			},
 		  ]);
