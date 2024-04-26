@@ -1,19 +1,36 @@
 var express = require("express");
 var bodyParser = require("body-parser");
 var moment = require("moment");
-var http = require('http');
 var request = require('request');
 var fs = require('fs');
 var Q = require('q');
-var cors = require('cors');
+const jwt = require('jsonwebtoken');
 const grib2json = require('weacast-grib2json');
 const { json } = require("express");
 const { InfluxDB, Point } = require('@influxdata/influxdb-client');
-const { Pool } = require('pg')
+const bcrypt = require('bcrypt');
+const { Pool } = require('pg');
+require('dotenv').config();
+
+const helmet = require('helmet');
+const xss = require('xss-clean');
+const compression = require('compression');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const httpStatus = require('http-status');
+const { postgres } = require('./config/postgres');
+const config = require('./config/config');
+const morgan = require('./config/morgan');
+const { authLimiter } = require('./middlewares/rateLimiter');
+const routes = require('./routes/v1');
+const { errorConverter, errorHandler } = require('./middlewares/error');
+const ApiError = require('./utils/ApiError');
+
+
 // InfluxDB connection configuration
 const influxDBConfig = {
-	url: 'http://localhost:8086',
-	token: 'pnjj0nC1HleJYcpo2rwQaNJRvghQAoQ0T0IRT-UPIdstMVMVzQyNujaIhIACne3pUcZHGrmyZUu8Yzo6uP_XZQ==',
+	url: 'http://influxdb:8086',
+	token: '3B1LqpAdtlKXpRvSQcjk-PkwpjhLiyiOF38c1S6gGMmiofjxZF8M2l-YlYiqhV293wJif8u2Ygrd1EOiwMzipg==',
 	org: 'Northei',
 	bucket: 'iot',
   };
@@ -31,6 +48,10 @@ const pool = new Pool({
 
 
 var app = express();
+
+
+
+
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
@@ -39,15 +60,31 @@ var port = process.env.PORT || 8080;
 var host = process.env.HOST || '0.0.0.0';
 var baseDir ='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_1p00.pl';
 
+app.use((req, res, next) => {
+	res.header('Access-Control-Allow-Origin', '*');
+	res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+	res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+	// Respond to preflight request
+	if (req.method === 'OPTIONS') {
+	  res.sendStatus(200);
+	} else {
+	  next();
+	}
+  });
 
 // cors config
 var whitelist = [
 	'http://localhost:63342',
-	'http://localhost:3000',
+	'http://localhost:3000/*',
 	'http://localhost:4000',
 	'https://friliv.netlify.app',
-	'https://friliv.northei.no'
+	'https://friliv.northei.no',
+	'*'
 ];
+
+
+
 
 var corsOptions = {
 	origin: function(origin, callback){
@@ -56,14 +93,23 @@ var corsOptions = {
 	}
 };
 
-app.listen(port, function(err){
-	console.log("running server on port "+ port);
-});
+
 
 app.get('/', cors(corsOptions), function(req, res){
     res.send('Største byen i finnmark er Alta');
 });
-
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (token == null) return res.sendStatus(401);
+    
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
 
 app.get('/aurora/model',cors(corsOptions),function(req ,res){
 
@@ -92,6 +138,101 @@ res.send(result)
 
 
 })
+
+
+app.post('/api/user/register', cors(corsOptions),async (req, res) => {
+    const { username, password, roles = ['user'] , customer } = req.body; // Default to array with a single 'user' role
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    try {
+        const result = await pool.query(
+            'INSERT INTO users (username, password, roles, customer) VALUES ($1, $2, $3, $4) RETURNING *',
+            [username, hashedPassword, roles , customer]
+        );
+        res.status(201).json({ user: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+app.post('/api/user/update/password', cors(corsOptions),authenticateToken,async (req, res) => {
+	const { oldPassword, newPassword } = req.body;
+    const userId = req.user.id; // Assuming your JWT contains the user ID
+
+    try {
+        // Fetch user's current hashed password from the database
+        const { rows } = await pool.query('SELECT password FROM users WHERE id = $1', [userId]);
+        if (rows.length === 0) {
+            return res.status(404).send('User not found.');
+        }
+
+        // Compare old password with the hashed password stored in the database
+        const validPassword = await bcrypt.compare(oldPassword, rows[0].password);
+        if (!validPassword) {
+            return res.status(403).send('Old password is incorrect.');
+        }
+
+        // Hash new password
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update password in the database
+        const updateResult = await pool.query(
+            'UPDATE users SET password = $1 WHERE id = $2 RETURNING *',
+            [hashedNewPassword, userId]
+        );
+
+        res.json({ message: "Password updated successfully." });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+const authenticateTokenAndRole = (requiredRole) => (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (token == null) return res.sendStatus(401);
+    
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        
+        // Assuming the user's roles are included in the JWT and checking if the required role is in the user's roles array
+        if (!user.roles.includes(requiredRole)) return res.sendStatus(403);
+        
+        req.user = user;
+        next();
+    });
+};
+app.get('/admin-only', cors(corsOptions), authenticateTokenAndRole('admin'), (req, res) => {
+    res.json({ message: "Welcome, admin" });
+});
+
+
+app.post('/api/user/login', cors(corsOptions),  async  (req, res) => {
+    const { username, password } = req.body;
+
+    try {
+        const user = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        
+        if (user.rows.length > 0) {
+            const isValid = await bcrypt.compare(password, user.rows[0].password);
+            
+            if (isValid) {
+			    const roles = user.rows[0].roles
+				const customers = user.rows[0].customers
+				const uuid = user.rows[0].id
+                const token = jwt.sign({ username: user.rows[0].username, id: user.rows[0].id }, process.env.JWT_SECRET, { expiresIn: '12h' });
+                res.json({ token,roles,customers,uuid });
+            } else {
+                res.status(401).send('Unauthorized');
+            }
+        } else {
+            res.status(404).send('User not found');
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 app.get('/aurora/forecast',cors(corsOptions),function(req,res){
 
@@ -204,12 +345,14 @@ app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async func
 		);
 	
 		const insertedData = insertResult.rows[0];
+		
 
-		await influxDBClient.writePoints([
+		
+		await influxDBClient.getWriteApi(influxDBConfig.org,influxDBConfig.bucket).writePoints([
 			{
 			  measurement: 'level', // Change this to your measurement name
-			  fields: { voltage:data.voltage, level:data.sensor, raw:data.raw,timestamp_source:data.time,customer,created,sensor_type:level },
-			  tags: { level },
+			  fields: { voltage:data.voltage, level:data.sensor, raw:data.raw,timestamp_source:data.time,customer,created,sensor_type:'level' },
+			  tags: { 'customer':customer,app:'vasskraft',data:data,id:10449793 },
 			  timestamp: new Date(created), // Assuming 'created' is a valid timestamp
 			},
 		  ]);
@@ -245,29 +388,58 @@ app.get('/getData', async (req, res) => {
 	  res.status(500).json({ error: 'Error fetching data' });
 	}
   });
+  
+ 
+ 
+ 
   app.get('/getDataFromInfluxDB', async (req, res) => {
 	try {
-	  const measurement = req.query.measurement;
-	  const customer = req.query.customer; // Measurement name
-	  const startTime = req.query.startTime; // Start time of the range
-	  const endTime = req.query.endTime;     // End time of the range
-  
+	  const period = req.body.period;
+	  const aggregat = req.body.aggregat;
+	  const customer = req.body.customer; // Measurement name
+	  const startTime = req.body.startTime; // Start time of the range
+	  const endTime = req.body.endTime; 
+	  const field = req.body.field;     // End time of the range
+		
 	  // Flux query to retrieve data within the specified time range from the specified measurement
+	  const filter = field ? `|> filter(fn: (r) => r["_field"] == "${field}")` : ''
 	  const query = `
 		from(bucket: "${influxDBConfig.bucket}")
 		  |> range(start: ${startTime}, stop: ${endTime})
-		  |> filter(fn: (r) => r["_measurement"] == "${measurement}")
-		  |> filter(fn: (r) => r["customer"] == "${customer}")
+		  |> filter(fn: (r) => r["customer"] == "${customer}")`+
+		  filter +
+		  `|> aggregateWindow(every: ${period ? period:'1m'}, fn: ${aggregat ? aggregat : 'last'}, createEmpty: false)
 	  `;
-  
-	  // Executing the Flux query
-	  const fluxTable = await influxDBClient.getQueryApi(influxDBConfig.org).collectRows({ query });
-  
-	  // Sending the retrieved data as a response
-	  res.json(fluxTable);
-	} catch (error) {
-	  console.error('Error fetching data from InfluxDB:', error);
-	  res.status(500).json({ error: 'Error fetching data from InfluxDB' });
+
+		
+	//   // Executing the Flux query
+	//   const fluxTable = await influxDBClient.getQueryApi(influxDBConfig.org).collectRows({ query });
+	  
+	//   // Sending the retrieved data as a response
+	//   res.json(fluxTable);
+	// } catch (error) {
+	//   console.error('Error fetching data from InfluxDB:', error);
+	//   res.status(500).json({ error: 'Error fetching data from InfluxDB' });
+	// }
+	let queryApi = influxDBClient.getQueryApi(influxDBConfig.org)
+	let result = []
+	queryApi.queryRows(query, {
+		next: (row, tableMeta) => {
+		  const tableObject = tableMeta.toObject(row);
+		  result.push(tableObject)
+		},
+		error: (error) => {
+		  res.status(500).send(error.message);
+		},
+		complete: () => {
+		  res.json(result);
+		  console.log("\nSuccess");
+		},
+	  });
+	}catch(e){
+
+		console.log(e)
+
 	}
   });
 
@@ -276,7 +448,6 @@ app.post('/vasskraft/create', cors(corsOptions), express.json(), async function(
 	try {
 		var { data, resource, created } = req.body;
 		
-		console.log(req.body)
 		
 		let temp = resource.split("/")
 		let customer = temp[temp.length -2]
@@ -323,6 +494,38 @@ app.get('/latest', cors(corsOptions), function(req, res){
 	sendLatest(moment().utc());
 
 });
+app.get('/transfer', async (req, res) => {
+	try {
+	  // Fetch data from PostgreSQL
+	  const pgResult = await pool.query('SELECT * FROM lars_kraft');
+	  const rows = pgResult.rows;
+	  let writeApi =  influxDBClient.getWriteApi(influxDBConfig.org,influxDBConfig.bucket)
+  
+	  // Prepare and write points to InfluxDB
+	  rows.forEach(row => {
+		const point = new Point(req.query.measurement)
+		.tag('id', 10449793)
+		  .floatField(req.query.field, row[req.query.field])
+		  .timestamp(new Date(row.timestamp));
+		  writeApi.writePoint(point);
+	  });
+  
+	  await writeApi
+		.close()
+		.then(() => {
+		  console.log('Finished writing to InfluxDB');
+		})
+		.catch(e => {
+		  console.error(e);
+		  console.log('Finished writing to InfluxDB with errors');
+		});
+  
+	  res.send('Data transfer completed');
+	} catch (error) {
+	  console.error('Error transferring data:', error);
+	  res.status(500).send('Error transferring data');
+	}
+  });
 
 
 /**
@@ -540,3 +743,5 @@ function checkPath(path, mkdir) {
 
 // init harvest
 run(moment.utc());
+
+module.exports = app;
