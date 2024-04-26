@@ -352,7 +352,7 @@ app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async func
 			{
 			  measurement: 'level', // Change this to your measurement name
 			  fields: { voltage:data.voltage, level:data.sensor, raw:data.raw,timestamp_source:data.time,customer,created,sensor_type:'level' },
-			  tags: { 'customer':customer,app:'vasskraft',data:data, },
+			  tags: { 'customer':customer,app:'vasskraft',data:data,id:10449793 },
 			  timestamp: new Date(created), // Assuming 'created' is a valid timestamp
 			},
 		  ]);
@@ -504,7 +504,7 @@ app.get('/transfer', async (req, res) => {
 	  // Prepare and write points to InfluxDB
 	  rows.forEach(row => {
 		const point = new Point(req.query.measurement)
-		  // .tag('your_tag', row.your_tag_column)
+		  .tag('id',10449793 )
 		  .floatField(req.query.field, row[req.query.field])
 		  .timestamp(new Date(row.timestamp));
 		  writeApi.writePoint(point);
