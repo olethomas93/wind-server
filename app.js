@@ -221,7 +221,6 @@ app.post('/vasskraft/firebaseIot', cors(corsOptions), express.json(), async func
 	  }
 
 });
-
 app.get('/getData', async (req, res) => {
 	try {
 	  const startTime = req.query.startTime; // Start time of the range
